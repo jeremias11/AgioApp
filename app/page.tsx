@@ -1,5 +1,5 @@
-import { DashboardView } from "@/components/dashboard/dashboard-view"
+import App from "../frontend/src/App"
 
-export default function Home() {
-  return <DashboardView />
+export default function Page() {
+  return <App />
 }
