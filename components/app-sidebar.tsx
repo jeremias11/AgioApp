@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, CreditCard, DollarSign, FileText, Home, Import, AlertTriangle } from "lucide-react"
+import { Calendar, CreditCard, DollarSign, FileText, Home, Import, AlertTriangle, Settings } from "lucide-react"
 
 import {
   Sidebar,
@@ -48,6 +48,11 @@ const menuItems = [
     title: "Importar Dados",
     url: "/importar",
     icon: Import,
+  },
+  {
+    title: "Configurações",
+    url: "/configuracoes",
+    icon: Settings,
   },
 ]
 

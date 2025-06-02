@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Download, Eye } from "lucide-react"
+import { ReceiptPreview } from "./receipt-preview"
 import jsPDF from "jspdf"
 
 interface PaymentData {
@@ -32,19 +32,94 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
     setIsGenerating(true)
 
     try {
+      // Carregar configurações salvas
+      const savedConfig = localStorage.getItem("receiptConfig")
+      const config = savedConfig
+        ? JSON.parse(savedConfig)
+        : {
+            nomeEmpresa: "ÁgioApp Financeira",
+            cnpj: "00.000.000/0001-00",
+            endereco: "Rua das Finanças, 123 - Centro",
+            telefone: "(11) 99999-9999",
+            email: "contato@agioapp.com",
+            logo: null,
+            template: "moderno",
+            corPrimaria: "#2563eb",
+            corSecundaria: "#64748b",
+            fonte: "helvetica",
+            tituloRecibo: "RECIBO DE PAGAMENTO",
+            rodape: "Este recibo comprova o pagamento realizado na data especificada.",
+            observacoesDefault: "",
+            mostrarAssinatura: true,
+            mostrarCarimbo: false,
+          }
+
       const doc = new jsPDF()
       const pageWidth = doc.internal.pageSize.width
       const margin = 20
       let yPosition = 30
 
-      // Cabeçalho
-      doc.setFontSize(20)
-      doc.setFont("helvetica", "bold")
-      doc.text("RECIBO DE PAGAMENTO", pageWidth / 2, yPosition, { align: "center" })
+      // Configurar fonte
+      const fontMap = {
+        helvetica: "helvetica",
+        arial: "helvetica", // jsPDF usa helvetica para arial
+        times: "times",
+      }
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica")
 
-      yPosition += 20
+      // Cabeçalho com cor personalizada
+      if (config.template === "moderno" || config.template === "classico") {
+        // Converter hex para RGB
+        const hexToRgb = (hex: string) => {
+          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+          return result
+            ? {
+                r: Number.parseInt(result[1], 16),
+                g: Number.parseInt(result[2], 16),
+                b: Number.parseInt(result[3], 16),
+              }
+            : { r: 37, g: 99, b: 235 }
+        }
+
+        const primaryColor = hexToRgb(config.corPrimaria)
+        doc.setFillColor(primaryColor.r, primaryColor.g, primaryColor.b)
+        doc.rect(0, 0, pageWidth, 60, "F")
+        doc.setTextColor(255, 255, 255)
+      } else {
+        doc.setTextColor(0, 0, 0)
+      }
+
+      // Logo (se existir)
+      if (config.logo) {
+        try {
+          doc.addImage(config.logo, "JPEG", margin, 10, 30, 20)
+        } catch (error) {
+          console.log("Erro ao adicionar logo:", error)
+        }
+      }
+
+      // Título
+      doc.setFontSize(20)
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "bold")
+      doc.text(config.tituloRecibo, pageWidth / 2, 25, { align: "center" })
+
+      // Dados da empresa
+      doc.setFontSize(10)
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "normal")
+      yPosition = 35
+      doc.text(config.nomeEmpresa, pageWidth / 2, yPosition, { align: "center" })
+      yPosition += 5
+      doc.text(`CNPJ: ${config.cnpj}`, pageWidth / 2, yPosition, { align: "center" })
+      yPosition += 5
+      doc.text(config.endereco, pageWidth / 2, yPosition, { align: "center" })
+      yPosition += 5
+      doc.text(`${config.telefone} | ${config.email}`, pageWidth / 2, yPosition, { align: "center" })
+
+      // Resetar cor do texto
+      doc.setTextColor(0, 0, 0)
+
+      yPosition = 70
       doc.setFontSize(12)
-      doc.setFont("helvetica", "normal")
       doc.text(`Recibo Nº: ${paymentData.id.padStart(6, "0")}`, margin, yPosition)
       doc.text(
         `Data: ${new Date(paymentData.dataPagamento).toLocaleDateString("pt-BR")}`,
@@ -53,18 +128,18 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
       )
 
       // Linha separadora
-      yPosition += 15
+      yPosition += 10
       doc.line(margin, yPosition, pageWidth - margin, yPosition)
 
       // Dados do pagamento
-      yPosition += 20
+      yPosition += 15
       doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "bold")
       doc.text("DADOS DO PAGAMENTO", margin, yPosition)
 
-      yPosition += 15
+      yPosition += 10
       doc.setFontSize(11)
-      doc.setFont("helvetica", "normal")
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "normal")
 
       const lines = [
         `Devedor: ${paymentData.devedor}`,
@@ -81,41 +156,49 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
         `Novo Saldo: ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.novoSaldo)}`,
       ]
 
-      if (paymentData.observacoes) {
-        lines.push("", `Observações: ${paymentData.observacoes}`)
+      if (paymentData.observacoes || config.observacoesDefault) {
+        lines.push("", `Observações: ${paymentData.observacoes || config.observacoesDefault}`)
       }
 
       lines.forEach((line) => {
         if (line.startsWith("VALORES:") || line.startsWith("SALDO DO CONTRATO:")) {
-          doc.setFont("helvetica", "bold")
+          doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "bold")
         } else if (line.startsWith("Valor Total Pago:") || line.startsWith("Novo Saldo:")) {
-          doc.setFont("helvetica", "bold")
+          doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "bold")
         } else {
-          doc.setFont("helvetica", "normal")
+          doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "normal")
         }
 
         doc.text(line, margin, yPosition)
-        yPosition += 12
+        yPosition += 8
       })
 
-      // Assinatura
-      yPosition += 30
-      doc.line(margin, yPosition, margin + 80, yPosition)
-      yPosition += 10
-      doc.setFontSize(10)
-      doc.text("Assinatura do Credor", margin, yPosition)
+      // Assinatura (se habilitada)
+      if (config.mostrarAssinatura) {
+        yPosition += 20
+        doc.line(margin, yPosition, margin + 80, yPosition)
+        doc.line(pageWidth - margin - 80, yPosition, pageWidth - margin, yPosition)
+        yPosition += 8
+        doc.setFontSize(10)
+        doc.text("Assinatura do Credor", margin, yPosition)
+        doc.text("Assinatura do Devedor", pageWidth - margin - 80, yPosition)
+      }
 
-      doc.line(pageWidth - margin - 80, yPosition - 10, pageWidth - margin, yPosition - 10)
-      doc.text("Assinatura do Devedor", pageWidth - margin - 80, yPosition)
+      // Carimbo (se habilitado)
+      if (config.mostrarCarimbo) {
+        yPosition += 15
+        const carimboX = pageWidth / 2 - 20
+        doc.rect(carimboX, yPosition, 40, 20)
+        doc.setFontSize(8)
+        doc.text("CARIMBO", carimboX + 20, yPosition + 12, { align: "center" })
+      }
 
       // Rodapé
       yPosition = doc.internal.pageSize.height - 30
       doc.setFontSize(8)
-      doc.setFont("helvetica", "italic")
-      doc.text("Este recibo comprova o pagamento realizado na data especificada.", pageWidth / 2, yPosition, {
-        align: "center",
-      })
-      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pageWidth / 2, yPosition + 10, { align: "center" })
+      doc.setFont(fontMap[config.fonte as keyof typeof fontMap] || "helvetica", "italic")
+      doc.text(config.rodape, pageWidth / 2, yPosition, { align: "center" })
+      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pageWidth / 2, yPosition + 8, { align: "center" })
 
       // Salvar o PDF
       const fileName = `recibo_${paymentData.devedor.replace(/\s+/g, "_")}_${paymentData.dataPagamento}.pdf`
@@ -128,6 +211,10 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
       setIsGenerating(false)
     }
   }
+
+  // Carregar configurações para preview
+  const savedConfig = localStorage.getItem("receiptConfig")
+  const config = savedConfig ? JSON.parse(savedConfig) : undefined
 
   return (
     <div className="flex gap-2">
@@ -142,7 +229,7 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
           <DialogHeader>
             <DialogTitle>Preview do Recibo</DialogTitle>
           </DialogHeader>
-          <ReceiptPreview paymentData={paymentData} />
+          <ReceiptPreview paymentData={paymentData} config={config} />
         </DialogContent>
       </Dialog>
 
@@ -151,95 +238,5 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
         {isGenerating ? "Gerando..." : "Baixar PDF"}
       </Button>
     </div>
-  )
-}
-
-function ReceiptPreview({ paymentData }: { paymentData: PaymentData }) {
-  return (
-    <Card className="w-full">
-      <CardHeader className="text-center border-b">
-        <CardTitle className="text-xl">RECIBO DE PAGAMENTO</CardTitle>
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Recibo Nº: {paymentData.id.padStart(6, "0")}</span>
-          <span>Data: {new Date(paymentData.dataPagamento).toLocaleDateString("pt-BR")}</span>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 p-6">
-        <div>
-          <h3 className="font-semibold mb-2">DADOS DO PAGAMENTO</h3>
-          <div className="space-y-1 text-sm">
-            <p>
-              <strong>Devedor:</strong> {paymentData.devedor}
-            </p>
-            <p>
-              <strong>Contrato:</strong> {paymentData.contratoId.padStart(6, "0")}
-            </p>
-            <p>
-              <strong>Data do Pagamento:</strong> {new Date(paymentData.dataPagamento).toLocaleDateString("pt-BR")}
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="font-semibold mb-2">VALORES</h3>
-          <div className="space-y-1 text-sm">
-            <p>
-              <strong>
-                Valor Total Pago:{" "}
-                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.valorPago)}
-              </strong>
-            </p>
-            <p className="ml-4">
-              • Juros:{" "}
-              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.valorJuros)}
-            </p>
-            <p className="ml-4">
-              • Capital:{" "}
-              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.valorCapital)}
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="font-semibold mb-2">SALDO DO CONTRATO</h3>
-          <div className="space-y-1 text-sm">
-            <p>
-              Saldo Anterior:{" "}
-              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.saldoAnterior)}
-            </p>
-            <p>
-              <strong>
-                Novo Saldo:{" "}
-                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(paymentData.novoSaldo)}
-              </strong>
-            </p>
-          </div>
-        </div>
-
-        {paymentData.observacoes && (
-          <div>
-            <h3 className="font-semibold mb-2">OBSERVAÇÕES</h3>
-            <p className="text-sm">{paymentData.observacoes}</p>
-          </div>
-        )}
-
-        <div className="flex justify-between pt-8 border-t">
-          <div className="text-center">
-            <div className="border-b border-gray-400 w-32 mb-2"></div>
-            <p className="text-xs">Assinatura do Credor</p>
-          </div>
-          <div className="text-center">
-            <div className="border-b border-gray-400 w-32 mb-2"></div>
-            <p className="text-xs">Assinatura do Devedor</p>
-          </div>
-        </div>
-
-        <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-          <p>Este recibo comprova o pagamento realizado na data especificada.</p>
-          <p>Gerado em: {new Date().toLocaleString("pt-BR")}</p>
-        </div>
-      </CardContent>
-    </Card>
   )
 }
