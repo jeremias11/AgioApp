@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, FileText, Download, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, FileText, Download, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/components/ui/use-toast"
+import { useRouter } from "next/navigation"
 
 type ImportType = "contratos" | "pagamentos"
 type ImportStep = "upload" | "mapping" | "preview" | "complete"
@@ -26,13 +28,19 @@ interface PreviewData {
 }
 
 export function ImportData() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [importType, setImportType] = useState<ImportType>("contratos")
   const [currentStep, setCurrentStep] = useState<ImportStep>("upload")
   const [file, setFile] = useState<File | null>(null)
   const [csvData, setCsvData] = useState<string[][]>([])
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({})
   const [previewData, setPreviewData] = useState<PreviewData[]>([])
-  const [importResults, setImportResults] = useState<{ success: number; errors: number }>({ success: 0, errors: 0 })
+  const [importResults, setImportResults] = useState<{ success: number; errors: number; detalhes?: any[] }>({
+    success: 0,
+    errors: 0,
+  })
+  const [isImporting, setIsImporting] = useState(false)
 
   // Campos obrigatórios para cada tipo de importação
   const requiredFields = {
@@ -46,7 +54,7 @@ export function ImportData() {
       { key: "observacoes", label: "Observações (Opcional)" },
     ],
     pagamentos: [
-      { key: "nomeDevedor", label: "Nome do Devedor" },
+      { key: "contratoId", label: "ID do Contrato" },
       { key: "dataPagamento", label: "Data do Pagamento" },
       { key: "valorPago", label: "Valor Pago" },
       { key: "observacoes", label: "Observações (Opcional)" },
@@ -100,16 +108,75 @@ export function ImportData() {
     setCurrentStep("preview")
   }
 
-  const executeImport = () => {
-    // Simular importação
-    setTimeout(() => {
-      const totalRows = csvData.length - 1
+  const executeImport = async () => {
+    setIsImporting(true)
+
+    try {
+      // Preparar dados para importação
+      const dataRows = csvData.slice(1) // Pular cabeçalho
+      const importData = dataRows
+        .map((row) => {
+          const mappedRow: Record<string, any> = {}
+
+          Object.entries(columnMapping).forEach(([fieldKey, columnIndex]) => {
+            if (columnIndex && columnIndex !== "ignore") {
+              const colIndex = Number.parseInt(columnIndex)
+              mappedRow[fieldKey] = row[colIndex] || ""
+            }
+          })
+
+          return mappedRow
+        })
+        .filter((row) => {
+          // Filtrar linhas vazias
+          const requiredKeys = requiredFields[importType]
+            .filter((field) => !field.label.includes("Opcional"))
+            .map((field) => field.key)
+
+          return requiredKeys.every((key) => row[key] && row[key].trim() !== "")
+        })
+
+      // Enviar para API
+      const endpoint = importType === "contratos" ? "/api/contratos/importar" : "/api/pagamentos/importar"
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          [importType]: importData,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || `Erro ao importar ${importType}`)
+      }
+
+      const result = await response.json()
+      setImportResults(result)
+      setCurrentStep("complete")
+
+      toast({
+        title: "Importação concluída",
+        description: `${result.sucesso} ${importType} importados com sucesso.`,
+      })
+    } catch (error) {
+      console.error("Erro:", error)
+      toast({
+        title: "Erro na importação",
+        description: (error as Error).message || `Ocorreu um erro ao importar os ${importType}.`,
+        variant: "destructive",
+      })
       setImportResults({
-        success: Math.floor(totalRows * 0.9),
-        errors: Math.floor(totalRows * 0.1),
+        success: 0,
+        errors: csvData.length - 1,
       })
       setCurrentStep("complete")
-    }, 2000)
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   const resetImport = () => {
@@ -130,7 +197,7 @@ export function ImportData() {
       sampleData =
         "João Silva,11999887766,5000,5,2024-01-01,15,Primeiro empréstimo\nMaria Santos,11888776655,3000,4,2024-01-15,20,Cliente regular"
     } else {
-      sampleData = "João Silva,2024-01-15,500,Pagamento em dia\nMaria Santos,2024-01-14,300,Pagamento parcial"
+      sampleData = "1,2024-01-15,500,Pagamento em dia\n2,2024-01-14,300,Pagamento parcial"
     }
 
     const csvContent = `${headers}\n${sampleData}`
@@ -297,8 +364,17 @@ export function ImportData() {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button onClick={executeImport}>Confirmar Importação</Button>
-              <Button variant="outline" onClick={() => setCurrentStep("mapping")}>
+              <Button onClick={executeImport} disabled={isImporting}>
+                {isImporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importando...
+                  </>
+                ) : (
+                  "Confirmar Importação"
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentStep("mapping")} disabled={isImporting}>
                 Voltar
               </Button>
             </div>
@@ -343,7 +419,7 @@ export function ImportData() {
 
             <div className="flex gap-4 pt-4">
               <Button onClick={resetImport}>Nova Importação</Button>
-              <Button variant="outline" onClick={() => (window.location.href = `/${importType}`)}>
+              <Button variant="outline" onClick={() => router.push(`/${importType}`)}>
                 Ver {importType === "contratos" ? "Contratos" : "Pagamentos"}
               </Button>
             </div>

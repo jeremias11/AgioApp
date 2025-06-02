@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Contrato {
+  id              Int      @id @default(autoincrement())
+  nomeDevedor     String
+  telefone        String
+  valorEmprestado Float
+  taxaJuros       Float
+  dataEmprestimo  DateTime
+  diaVencimento   Int
+  observacoes     String?
+  saldoDevedor    Float
+  status          String   @default("ativo") // ativo, quitado, atrasado
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  pagamentos Pagamento[]
+}
+
+model Pagamento {
+  id            Int      @id @default(autoincrement())
+  contratoId    Int
+  dataPagamento DateTime
+  valorPago     Float
+  valorJuros    Float
+  valorCapital  Float
+  observacoes   String?
+  comprovante   String?  // URL ou caminho para o comprovante
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contrato Contrato @relation(fields: [contratoId], references: [id])
+}

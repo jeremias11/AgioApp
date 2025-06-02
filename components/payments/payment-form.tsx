@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,9 +11,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
 import { Upload, FileText } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
+
+interface Contrato {
+  id: number
+  nomeDevedor: string
+  saldoDevedor: number
+  taxaJuros: number
+}
 
 export function PaymentForm() {
   const router = useRouter()
+  const { toast } = useToast()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     contratoId: "",
     dataPagamento: "",
@@ -21,21 +31,40 @@ export function PaymentForm() {
     observacoes: "",
   })
   const [comprovante, setComprovante] = useState<File | null>(null)
+  const [contratos, setContratos] = useState<Contrato[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Dados simulados de contratos
-  const contratos = [
-    { id: "1", devedor: "João Silva", saldoDevedor: 4200, jurosDevido: 250 },
-    { id: "2", devedor: "Maria Santos", saldoDevedor: 2100, jurosDevido: 120 },
-    { id: "3", devedor: "Carlos Oliveira", saldoDevedor: 6800, jurosDevido: 480 },
-  ]
+  useEffect(() => {
+    const fetchContratos = async () => {
+      try {
+        const response = await fetch("/api/contratos")
+        if (!response.ok) {
+          throw new Error("Erro ao buscar contratos")
+        }
+        const data = await response.json()
+        setContratos(data)
+      } catch (err) {
+        console.error("Erro:", err)
+        toast({
+          title: "Erro ao carregar contratos",
+          description: "Não foi possível carregar a lista de contratos.",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const contratoSelecionado = contratos.find((c) => c.id === formData.contratoId)
+    fetchContratos()
+  }, [toast])
+
+  const contratoSelecionado = contratos.find((c) => c.id.toString() === formData.contratoId)
 
   const calcularDistribuicao = () => {
     if (!contratoSelecionado || !formData.valorPago) return null
 
     const valorPago = Number.parseFloat(formData.valorPago)
-    const jurosDevido = contratoSelecionado.jurosDevido
+    const jurosDevido = (contratoSelecionado.saldoDevedor * contratoSelecionado.taxaJuros) / 100
 
     let valorJuros = 0
     let valorCapital = 0
@@ -60,23 +89,65 @@ export function PaymentForm() {
 
   const distribuicao = calcularDistribuicao()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Aqui seria feita a chamada para a API
-    console.log("Dados do pagamento:", formData, distribuicao, comprovante)
+    setIsSubmitting(true)
 
-    // Redirecionar para página de sucesso com dados do pagamento
-    const params = new URLSearchParams({
-      id: "1",
-      devedor: contratoSelecionado?.devedor || "",
-      valor: formData.valorPago,
-      juros: distribuicao?.valorJuros.toString() || "0",
-      capital: distribuicao?.valorCapital.toString() || "0",
-      data: formData.dataPagamento,
-      obs: formData.observacoes,
-    })
+    try {
+      // Preparar dados para envio
+      const paymentData = {
+        ...formData,
+        valorPago: Number.parseFloat(formData.valorPago),
+      }
 
-    router.push(`/pagamentos/sucesso?${params.toString()}`)
+      // Enviar para API
+      const response = await fetch("/api/pagamentos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(paymentData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Erro ao registrar pagamento")
+      }
+
+      const result = await response.json()
+
+      toast({
+        title: "Pagamento registrado com sucesso!",
+        description: `Pagamento de ${new Intl.NumberFormat("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        }).format(Number.parseFloat(formData.valorPago))} registrado.`,
+      })
+
+      // Redirecionar para página de sucesso com dados do pagamento
+      const params = new URLSearchParams({
+        id: result.pagamento.id.toString(),
+        devedor: contratoSelecionado?.nomeDevedor || "",
+        valor: formData.valorPago,
+        juros: result.pagamento.valorJuros.toString(),
+        capital: result.pagamento.valorCapital.toString(),
+        data: formData.dataPagamento,
+        obs: formData.observacoes,
+        saldoAnterior: result.saldoAnterior.toString(),
+        novoSaldo: result.novoSaldo.toString(),
+      })
+
+      router.push(`/pagamentos/sucesso?${params.toString()}`)
+    } catch (error) {
+      console.error("Erro:", error)
+      toast({
+        title: "Erro ao registrar pagamento",
+        description: (error as Error).message || "Ocorreu um erro ao registrar o pagamento.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleChange = (field: string, value: string) => {
@@ -95,12 +166,12 @@ export function PaymentForm() {
               <Label htmlFor="contratoId">Selecionar Devedor</Label>
               <Select onValueChange={(value) => handleChange("contratoId", value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o devedor" />
+                  <SelectValue placeholder={loading ? "Carregando contratos..." : "Selecione o devedor"} />
                 </SelectTrigger>
                 <SelectContent>
                   {contratos.map((contrato) => (
-                    <SelectItem key={contrato.id} value={contrato.id}>
-                      {contrato.devedor} - Saldo:{" "}
+                    <SelectItem key={contrato.id} value={contrato.id.toString()}>
+                      {contrato.nomeDevedor} - Saldo:{" "}
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
@@ -176,10 +247,15 @@ export function PaymentForm() {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="submit" className="flex-1">
-                Registrar Pagamento
+              <Button type="submit" className="flex-1" disabled={isSubmitting || !contratoSelecionado}>
+                {isSubmitting ? "Registrando..." : "Registrar Pagamento"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => router.push("/pagamentos")}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push("/pagamentos")}
+                disabled={isSubmitting}
+              >
                 Cancelar
               </Button>
             </div>
@@ -200,7 +276,7 @@ export function PaymentForm() {
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
-                  }).format(contratoSelecionado.jurosDevido)}
+                  }).format((contratoSelecionado.saldoDevedor * contratoSelecionado.taxaJuros) / 100)}
                 </span>
               </div>
               <div className="flex justify-between">

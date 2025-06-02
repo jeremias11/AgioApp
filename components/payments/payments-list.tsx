@@ -5,57 +5,107 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ReceiptGenerator } from "./receipt-generator"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useToast } from "@/components/ui/use-toast"
+
+interface Pagamento {
+  id: number
+  contratoId: number
+  dataPagamento: string
+  valorPago: number
+  valorJuros: number
+  valorCapital: number
+  observacoes: string | null
+  contrato: {
+    nomeDevedor: string
+  }
+}
 
 export function PaymentsList() {
+  const { toast } = useToast()
+  const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-  }, [])
 
-  // Dados simulados
-  const payments = [
-    {
-      id: 1,
-      devedor: "João Silva",
-      dataPagamento: "2024-01-15",
-      valorPago: 500,
-      valorJuros: 250,
-      valorCapital: 250,
-      observacoes: "Pagamento em dia",
-      tipo: "completo",
-    },
-    {
-      id: 2,
-      devedor: "Maria Santos",
-      dataPagamento: "2024-01-14",
-      valorPago: 120,
-      valorJuros: 120,
-      valorCapital: 0,
-      observacoes: "Pagamento parcial - só juros",
-      tipo: "parcial",
-    },
-    {
-      id: 3,
-      devedor: "Pedro Costa",
-      dataPagamento: "2024-01-13",
-      valorPago: 800,
-      valorJuros: 300,
-      valorCapital: 500,
-      observacoes: "Pagamento com valor extra",
-      tipo: "completo",
-    },
-  ]
+    const fetchPagamentos = async () => {
+      try {
+        const response = await fetch("/api/pagamentos")
+        if (!response.ok) {
+          throw new Error("Erro ao buscar pagamentos")
+        }
+        const data = await response.json()
+        setPagamentos(data)
+      } catch (err) {
+        console.error("Erro:", err)
+        setError("Não foi possível carregar os pagamentos. Tente novamente mais tarde.")
+        toast({
+          title: "Erro ao carregar pagamentos",
+          description: "Não foi possível carregar a lista de pagamentos.",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  if (!mounted) {
+    if (mounted) {
+      fetchPagamentos()
+    }
+
+    return () => {
+      setMounted(false)
+    }
+  }, [toast])
+
+  if (!mounted || loading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Histórico de Pagamentos</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center h-32">
-            <div className="text-muted-foreground">Carregando...</div>
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Histórico de Pagamentos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="p-4 text-center">
+            <p className="text-red-500">{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (pagamentos.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Histórico de Pagamentos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="p-8 text-center">
+            <p className="text-muted-foreground mb-4">Nenhum pagamento registrado.</p>
+            <p className="text-sm text-muted-foreground">
+              Registre um novo pagamento ou importe pagamentos existentes.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -82,10 +132,10 @@ export function PaymentsList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {payments.map((payment) => (
+            {pagamentos.map((payment) => (
               <TableRow key={payment.id}>
-                <TableCell className="font-medium">{payment.devedor}</TableCell>
-                <TableCell>{payment.dataPagamento}</TableCell>
+                <TableCell className="font-medium">{payment.contrato.nomeDevedor}</TableCell>
+                <TableCell>{new Date(payment.dataPagamento).toLocaleDateString("pt-BR")}</TableCell>
                 <TableCell>
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
@@ -105,24 +155,24 @@ export function PaymentsList() {
                   }).format(payment.valorCapital)}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={payment.tipo === "completo" ? "default" : "secondary"}>
-                    {payment.tipo === "completo" ? "Completo" : "Parcial"}
+                  <Badge variant={payment.valorCapital > 0 ? "default" : "secondary"}>
+                    {payment.valorCapital > 0 ? "Completo" : "Parcial"}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-xs truncate">{payment.observacoes}</TableCell>
+                <TableCell className="max-w-xs truncate">{payment.observacoes || "-"}</TableCell>
                 <TableCell>
                   <ReceiptGenerator
                     paymentData={{
                       id: payment.id.toString(),
-                      devedor: payment.devedor,
+                      devedor: payment.contrato.nomeDevedor,
                       valorPago: payment.valorPago,
                       valorJuros: payment.valorJuros,
                       valorCapital: payment.valorCapital,
                       dataPagamento: payment.dataPagamento,
-                      observacoes: payment.observacoes,
-                      contratoId: "001",
-                      saldoAnterior: payment.valorPago + 1000,
-                      novoSaldo: 1000,
+                      observacoes: payment.observacoes || undefined,
+                      contratoId: payment.contratoId.toString(),
+                      saldoAnterior: payment.valorPago + 1000, // Valor fictício, em produção viria da API
+                      novoSaldo: 1000, // Valor fictício, em produção viria da API
                     }}
                   />
                 </TableCell>

@@ -10,9 +10,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
 
 export function ContractForm() {
   const router = useRouter()
+  const { toast } = useToast()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     nomeDevedor: "",
     telefone: "",
@@ -23,11 +26,40 @@ export function ContractForm() {
     observacoes: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Aqui seria feita a chamada para a API
-    console.log("Dados do contrato:", formData)
-    router.push("/contratos")
+    setIsSubmitting(true)
+
+    try {
+      const response = await fetch("/api/contratos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Erro ao salvar contrato")
+      }
+
+      toast({
+        title: "Contrato criado com sucesso!",
+        description: `Contrato para ${formData.nomeDevedor} foi registrado.`,
+      })
+
+      router.push("/contratos")
+    } catch (error) {
+      console.error("Erro:", error)
+      toast({
+        title: "Erro ao criar contrato",
+        description: (error as Error).message || "Ocorreu um erro ao salvar o contrato.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleChange = (field: string, value: string) => {
@@ -130,10 +162,10 @@ export function ContractForm() {
           </div>
 
           <div className="flex gap-4 pt-4">
-            <Button type="submit" className="flex-1">
-              Salvar Contrato
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting ? "Salvando..." : "Salvar Contrato"}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.push("/contratos")}>
+            <Button type="button" variant="outline" onClick={() => router.push("/contratos")} disabled={isSubmitting}>
               Cancelar
             </Button>
           </div>
