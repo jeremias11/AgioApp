@@ -1,3 +1,5 @@
+"use client"
+
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { ReceiptSettings } from "@/components/settings/receipt-settings"

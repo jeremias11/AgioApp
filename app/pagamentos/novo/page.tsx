@@ -1,3 +1,5 @@
+"use client"
+
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { PaymentForm } from "@/components/payments/payment-form"
