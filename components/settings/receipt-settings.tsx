@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,6 +56,24 @@ export function ReceiptSettings() {
     mostrarCarimbo: false,
   })
 
+  // Adicionar useEffect para carregar configurações salvas
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedConfig = localStorage.getItem("receiptConfig")
+      if (savedConfig) {
+        try {
+          const parsedConfig = JSON.parse(savedConfig)
+          setConfig(parsedConfig)
+          if (parsedConfig.logo) {
+            setPreviewLogo(parsedConfig.logo)
+          }
+        } catch (error) {
+          console.error("Erro ao carregar configurações:", error)
+        }
+      }
+    }
+  }, [])
+
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [previewLogo, setPreviewLogo] = useState<string | null>(null)
 
@@ -74,8 +92,10 @@ export function ReceiptSettings() {
   }
 
   const handleSave = () => {
-    // Aqui salvaria as configurações na API/localStorage
-    localStorage.setItem("receiptConfig", JSON.stringify(config))
+    // Verificar se está no cliente antes de acessar localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("receiptConfig", JSON.stringify(config))
+    }
     console.log("Configurações salvas:", config)
   }
 

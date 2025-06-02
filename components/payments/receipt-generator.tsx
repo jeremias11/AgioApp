@@ -32,8 +32,8 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
     setIsGenerating(true)
 
     try {
-      // Carregar configurações salvas
-      const savedConfig = localStorage.getItem("receiptConfig")
+      // Verificar se está no cliente antes de acessar localStorage
+      const savedConfig = typeof window !== "undefined" ? localStorage.getItem("receiptConfig") : null
       const config = savedConfig
         ? JSON.parse(savedConfig)
         : {
@@ -213,7 +213,7 @@ export function ReceiptGenerator({ paymentData, onGenerate }: ReceiptGeneratorPr
   }
 
   // Carregar configurações para preview
-  const savedConfig = localStorage.getItem("receiptConfig")
+  const savedConfig = typeof window !== "undefined" ? localStorage.getItem("receiptConfig") : null
   const config = savedConfig ? JSON.parse(savedConfig) : undefined
 
   return (
