@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
+import { Upload, FileText } from "lucide-react"
 
 export function PaymentForm() {
   const router = useRouter()
@@ -19,6 +20,7 @@ export function PaymentForm() {
     valorPago: "",
     observacoes: "",
   })
+  const [comprovante, setComprovante] = useState<File | null>(null)
 
   // Dados simulados de contratos
   const contratos = [
@@ -49,13 +51,32 @@ export function PaymentForm() {
     return { valorJuros, valorCapital }
   }
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setComprovante(file)
+    }
+  }
+
   const distribuicao = calcularDistribuicao()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     // Aqui seria feita a chamada para a API
-    console.log("Dados do pagamento:", formData, distribuicao)
-    router.push("/pagamentos")
+    console.log("Dados do pagamento:", formData, distribuicao, comprovante)
+
+    // Redirecionar para página de sucesso com dados do pagamento
+    const params = new URLSearchParams({
+      id: "1",
+      devedor: contratoSelecionado?.devedor || "",
+      valor: formData.valorPago,
+      juros: distribuicao?.valorJuros.toString() || "0",
+      capital: distribuicao?.valorCapital.toString() || "0",
+      data: formData.dataPagamento,
+      obs: formData.observacoes,
+    })
+
+    router.push(`/pagamentos/sucesso?${params.toString()}`)
   }
 
   const handleChange = (field: string, value: string) => {
@@ -123,6 +144,35 @@ export function PaymentForm() {
                 onChange={(e) => handleChange("observacoes", e.target.value)}
                 placeholder="Motivo do atraso, forma de pagamento, etc..."
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="comprovante">Comprovante de Pagamento (Opcional)</Label>
+              <div className="border-2 border-dashed border-border rounded-lg p-4">
+                <div className="flex items-center justify-center">
+                  <Label htmlFor="comprovante-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Clique para anexar comprovante</span>
+                    <span className="text-xs text-muted-foreground">PNG, JPG, PDF até 5MB</span>
+                  </Label>
+                  <Input
+                    id="comprovante-upload"
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+                {comprovante && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-muted rounded">
+                    <FileText className="h-4 w-4" />
+                    <span className="text-sm">{comprovante.name}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setComprovante(null)}>
+                      Remover
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4 pt-4">

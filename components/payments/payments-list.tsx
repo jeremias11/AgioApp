@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ReceiptGenerator } from "./receipt-generator"
 
 export function PaymentsList() {
   // Dados simulados
@@ -55,6 +56,7 @@ export function PaymentsList() {
               <TableHead>Capital</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Observações</TableHead>
+              <TableHead>Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -86,6 +88,22 @@ export function PaymentsList() {
                   </Badge>
                 </TableCell>
                 <TableCell className="max-w-xs truncate">{payment.observacoes}</TableCell>
+                <TableCell>
+                  <ReceiptGenerator
+                    paymentData={{
+                      id: payment.id.toString(),
+                      devedor: payment.devedor,
+                      valorPago: payment.valorPago,
+                      valorJuros: payment.valorJuros,
+                      valorCapital: payment.valorCapital,
+                      dataPagamento: payment.dataPagamento,
+                      observacoes: payment.observacoes,
+                      contratoId: "001",
+                      saldoAnterior: payment.valorPago + 1000,
+                      novoSaldo: 1000,
+                    }}
+                  />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
